@@ -14,6 +14,11 @@ DOCKER_COMPOSE_URL="$BASE_URL/docker-compose.published.yml"
 ENV_EXAMPLE_URL="$BASE_URL/.env.docker.example"
 DOCKER_IMAGE="ladybugsio/ladybugs"
 
+# Secrets Manager configuration (set by Terraform)
+USE_SECRETS_MANAGER="${use_secrets_manager}"
+SECRETS_MANAGER_ARN="${secrets_manager_arn}"
+AWS_REGION="${aws_region}"
+
 # Create install directory
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -49,11 +54,65 @@ curl -fsSL "$DOCKER_COMPOSE_URL" -o docker-compose.yml
 echo "Downloading .env template..."
 curl -fsSL "$ENV_EXAMPLE_URL" -o .env.example
 
-# Write environment variables from Terraform
+# Configure environment variables
 echo "Configuring environment variables..."
-cat > .env << 'ENVEOF'
+
+if [ "$USE_SECRETS_MANAGER" = "true" ]; then
+    echo "Fetching environment variables from AWS Secrets Manager..."
+
+    # Install jq for JSON parsing (if not already installed)
+    if ! command -v jq &> /dev/null; then
+        echo "Installing jq..."
+        dnf install -y jq
+    fi
+
+    # Fetch secret from Secrets Manager and convert JSON to .env format
+    # The secret is stored as JSON: {"KEY1": "value1", "KEY2": "value2"}
+    aws secretsmanager get-secret-value \
+        --secret-id "$SECRETS_MANAGER_ARN" \
+        --region "$AWS_REGION" \
+        --query 'SecretString' \
+        --output text | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > .env
+
+    echo "Environment variables loaded from Secrets Manager"
+
+    # Create a script to refresh secrets (can be run manually or via cron)
+    cat > /opt/ladybugs/refresh-secrets.sh << 'REFRESH_EOF'
+#!/bin/bash
+# Refresh environment variables from Secrets Manager
+# Run this script to pull latest secrets without redeploying
+
+set -e
+cd /opt/ladybugs
+
+echo "Fetching latest secrets from Secrets Manager..."
+aws secretsmanager get-secret-value \
+    --secret-id "$SECRETS_MANAGER_ARN" \
+    --region "$AWS_REGION" \
+    --query 'SecretString' \
+    --output text | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > .env.new
+
+# Backup current .env and replace
+if [ -f .env ]; then
+    cp .env .env.backup
+fi
+mv .env.new .env
+
+echo "Secrets refreshed. Restart containers to apply:"
+echo "  cd /opt/ladybugs && docker compose down && docker compose up -d"
+REFRESH_EOF
+
+    # Inject the actual ARN and region into the refresh script
+    sed -i "s|\$SECRETS_MANAGER_ARN|$SECRETS_MANAGER_ARN|g" /opt/ladybugs/refresh-secrets.sh
+    sed -i "s|\$AWS_REGION|$AWS_REGION|g" /opt/ladybugs/refresh-secrets.sh
+    chmod +x /opt/ladybugs/refresh-secrets.sh
+
+else
+    # Direct mode: Write environment variables from Terraform
+    cat > .env << 'ENVEOF'
 ${env_content}
 ENVEOF
+fi
 
 # If no env vars provided, use the example file
 if [ ! -s .env ]; then

@@ -67,3 +67,22 @@ output "docker_logs_command" {
   description = "Command to view Docker logs"
   value       = "cd /opt/ladybugs && sudo docker compose logs -f"
 }
+
+# =============================================================================
+# Secrets Manager (when enabled)
+# =============================================================================
+
+output "secrets_manager_arn" {
+  description = "ARN of the Secrets Manager secret (if using Secrets Manager)"
+  value       = local.use_secrets_manager ? local.secrets_manager_arn : null
+}
+
+output "secrets_manager_name" {
+  description = "Name of the Secrets Manager secret (if created by this module)"
+  value       = var.create_secrets_manager ? aws_secretsmanager_secret.ladybugs[0].name : null
+}
+
+output "refresh_secrets_command" {
+  description = "Command to refresh secrets from Secrets Manager (run on EC2 instance)"
+  value       = local.use_secrets_manager ? "sudo /opt/ladybugs/refresh-secrets.sh" : "Secrets Manager not enabled"
+}

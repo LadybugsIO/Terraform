@@ -180,6 +180,109 @@ locals {
   env_content = join("\n", [
     for key, value in var.ladybugs_env_vars : "${key}=${value}"
   ])
+
+  # Determine if we're using Secrets Manager (either existing or created)
+  use_secrets_manager = var.secrets_manager_arn != "" || var.create_secrets_manager
+
+  # The ARN to use - either provided or created
+  secrets_manager_arn = var.secrets_manager_arn != "" ? var.secrets_manager_arn : (
+    var.create_secrets_manager ? aws_secretsmanager_secret.ladybugs[0].arn : ""
+  )
+
+  # Secret name for created secrets
+  secrets_manager_name = var.secrets_manager_name != "" ? var.secrets_manager_name : "${var.project_name}-${var.environment}-env"
+}
+
+# =============================================================================
+# Secrets Manager (Optional) - For secure environment variable storage
+# =============================================================================
+
+# Create Secrets Manager secret (only when create_secrets_manager is true)
+resource "aws_secretsmanager_secret" "ladybugs" {
+  count = var.create_secrets_manager ? 1 : 0
+
+  name        = local.secrets_manager_name
+  description = "Environment variables for Ladybugs application"
+
+  tags = {
+    Name        = "${var.project_name}-secrets"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Store the environment variables as JSON in the secret
+resource "aws_secretsmanager_secret_version" "ladybugs" {
+  count = var.create_secrets_manager ? 1 : 0
+
+  secret_id     = aws_secretsmanager_secret.ladybugs[0].id
+  secret_string = jsonencode(var.ladybugs_env_vars)
+}
+
+# =============================================================================
+# IAM Role for EC2 (Required when using Secrets Manager)
+# =============================================================================
+
+# IAM role for EC2 instance to access Secrets Manager
+resource "aws_iam_role" "ladybugs_ec2" {
+  count = local.use_secrets_manager ? 1 : 0
+
+  name = "${var.project_name}-${var.environment}-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.project_name}-ec2-role"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# IAM policy to allow reading the specific secret
+resource "aws_iam_role_policy" "secrets_manager_read" {
+  count = local.use_secrets_manager ? 1 : 0
+
+  name = "${var.project_name}-secrets-read"
+  role = aws_iam_role.ladybugs_ec2[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = local.secrets_manager_arn
+      }
+    ]
+  })
+}
+
+# Instance profile to attach the role to EC2
+resource "aws_iam_instance_profile" "ladybugs" {
+  count = local.use_secrets_manager ? 1 : 0
+
+  name = "${var.project_name}-${var.environment}-ec2-profile"
+  role = aws_iam_role.ladybugs_ec2[0].name
+
+  tags = {
+    Name        = "${var.project_name}-ec2-profile"
+    Environment = var.environment
+    Project     = var.project_name
+  }
 }
 
 # EC2 Instance
@@ -190,6 +293,9 @@ resource "aws_instance" "ladybugs" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ladybugs.id]
 
+  # Attach IAM instance profile when using Secrets Manager
+  iam_instance_profile = local.use_secrets_manager ? aws_iam_instance_profile.ladybugs[0].name : null
+
   root_block_device {
     volume_size           = var.volume_size
     volume_type           = "gp3"
@@ -198,8 +304,11 @@ resource "aws_instance" "ladybugs" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh", {
-    docker_hub_token = var.docker_hub_token
-    env_content      = local.env_content
+    docker_hub_token        = var.docker_hub_token
+    env_content             = local.env_content
+    use_secrets_manager     = local.use_secrets_manager
+    secrets_manager_arn     = local.secrets_manager_arn
+    aws_region              = var.aws_region
   }))
 
   tags = {
@@ -212,6 +321,12 @@ resource "aws_instance" "ladybugs" {
     # Prevent accidental destruction
     prevent_destroy = false
   }
+
+  # Ensure IAM role and Secrets Manager are created before the instance
+  depends_on = [
+    aws_iam_instance_profile.ladybugs,
+    aws_secretsmanager_secret_version.ladybugs
+  ]
 }
 
 # =============================================================================

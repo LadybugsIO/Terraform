@@ -26,9 +26,32 @@ allowed_api_cidrs = ["0.0.0.0/0"]
 # Docker Hub token (required - provided by Ladybugs team)
 docker_hub_token = "your-docker-hub-token-here"
 
-# Ladybugs environment variables
+# =============================================================================
+# Secrets Management Options
+# =============================================================================
+# You have three options for managing environment variables:
+#
+# OPTION 1: Direct mode (default)
+#   - Set ladybugs_env_vars below
+#   - Variables are written directly to .env file on EC2
+#   - Simple but secrets are stored in Terraform state
+#
+# OPTION 2: Use existing Secrets Manager
+#   - Set secrets_manager_arn to your existing secret's ARN
+#   - EC2 fetches secrets at runtime via IAM role
+#   - Your secret must be JSON format: {"KEY": "value", ...}
+#
+# OPTION 3: Create new Secrets Manager
+#   - Set create_secrets_manager = true
+#   - Set ladybugs_env_vars with your secrets
+#   - Module creates the secret, EC2 fetches at runtime
+#   - Best of both worlds: easy config + secure storage
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# OPTION 1: Direct environment variables (default)
+# -----------------------------------------------------------------------------
 # These are written to /opt/ladybugs/.env on the server
-# Add your API keys and configuration here
 ladybugs_env_vars = {
   # Required
   "OPEN_ROUTER_API_KEY" = "your-openrouter-api-key"
@@ -50,6 +73,19 @@ ladybugs_env_vars = {
   # "CORALOGIX_API_KEY" = "your-coralogix-key"
   # "GRAFANA_API_KEY" = "your-grafana-key"
 }
+
+# -----------------------------------------------------------------------------
+# OPTION 2: Use existing AWS Secrets Manager secret
+# -----------------------------------------------------------------------------
+# Uncomment to use an existing secret (must be JSON format)
+# secrets_manager_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-ladybugs-secrets-AbCdEf"
+
+# -----------------------------------------------------------------------------
+# OPTION 3: Create new AWS Secrets Manager secret
+# -----------------------------------------------------------------------------
+# Uncomment to have the module create a Secrets Manager secret from ladybugs_env_vars
+# create_secrets_manager = true
+# secrets_manager_name = "ladybugs-production-env"  # Optional: custom name for the secret
 
 # Resource tagging
 environment  = "production"

@@ -48,10 +48,29 @@ variable "docker_hub_token" {
 }
 
 variable "ladybugs_env_vars" {
-  description = "Environment variables for Ladybugs (will be written to .env file)"
+  description = "Environment variables for Ladybugs (will be written to .env file or Secrets Manager)"
   type        = map(string)
   default     = {}
   sensitive   = true
+}
+
+# Secrets Manager Configuration
+variable "secrets_manager_arn" {
+  description = "ARN of an existing AWS Secrets Manager secret containing environment variables (JSON format). If provided, env vars will be fetched from this secret at runtime."
+  type        = string
+  default     = ""
+}
+
+variable "create_secrets_manager" {
+  description = "If true, creates a new Secrets Manager secret from ladybugs_env_vars instead of writing them directly to the .env file. The EC2 instance will fetch secrets at runtime."
+  type        = bool
+  default     = false
+}
+
+variable "secrets_manager_name" {
+  description = "Name for the Secrets Manager secret (only used when create_secrets_manager is true)"
+  type        = string
+  default     = ""
 }
 
 # Tags
