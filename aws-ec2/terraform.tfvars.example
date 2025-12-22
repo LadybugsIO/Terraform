@@ -1,0 +1,56 @@
+# Ladybugs Terraform Configuration
+# Copy this file to terraform.tfvars and fill in your values
+# IMPORTANT: Never commit terraform.tfvars to version control (it contains secrets)
+
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Instance Configuration
+# t3.large (2 vCPU, 8GB RAM) is recommended for production
+# t3.medium (2 vCPU, 4GB RAM) is minimum viable
+# t3.xlarge (4 vCPU, 16GB RAM) for heavy usage
+instance_type = "t3.large"
+
+# Storage size in GB (50GB recommended, expandable later)
+volume_size = 50
+
+# SSH key pair name (must exist in AWS, leave empty to disable SSH)
+# Create one in AWS Console: EC2 > Key Pairs > Create key pair
+key_name = ""
+
+# Network Security
+# Restrict these to your IP for better security (e.g., ["1.2.3.4/32"])
+allowed_ssh_cidrs = ["0.0.0.0/0"]
+allowed_api_cidrs = ["0.0.0.0/0"]
+
+# Docker Hub token (required - provided by Ladybugs team)
+docker_hub_token = "your-docker-hub-token-here"
+
+# Ladybugs environment variables
+# These are written to /opt/ladybugs/.env on the server
+# Add your API keys and configuration here
+ladybugs_env_vars = {
+  # Required
+  "OPEN_ROUTER_API_KEY" = "your-openrouter-api-key"
+
+  # Optional - uncomment and configure as needed
+  # "PORT" = "5000"
+  # "OPEN_ROUTER_MODE" = "Live"
+
+  # Slack Integration
+  # "SLACK_BOT_TOKEN" = "xoxb-your-token"
+  # "SLACK_SIGNING_SECRET" = "your-signing-secret"
+
+  # Jira Integration
+  # "JIRA_WEBHOOK_SECRET" = "your-webhook-secret"
+
+  # Log Systems
+  # "CLOUDWATCH_ACCESS_KEY_ID" = "your-aws-key"
+  # "CLOUDWATCH_SECRET_ACCESS_KEY" = "your-aws-secret"
+  # "CORALOGIX_API_KEY" = "your-coralogix-key"
+  # "GRAFANA_API_KEY" = "your-grafana-key"
+}
+
+# Resource tagging
+environment  = "production"
+project_name = "ladybugs"
