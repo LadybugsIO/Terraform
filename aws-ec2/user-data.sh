@@ -19,6 +19,10 @@ USE_SECRETS_MANAGER="${use_secrets_manager}"
 SECRETS_MANAGER_ARN="${secrets_manager_arn}"
 AWS_REGION="${aws_region}"
 
+# CloudWatch monitoring configuration (set by Terraform)
+ENABLE_CLOUDWATCH_MONITORING="${enable_cloudwatch_monitoring}"
+PROJECT_NAME="${project_name}"
+
 # Create install directory
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -127,6 +131,94 @@ docker compose pull
 # Start services
 echo "Starting Ladybugs services..."
 docker compose up -d
+
+# =============================================================================
+# CloudWatch Agent Installation (for CPU, Memory, Disk metrics)
+# =============================================================================
+if [ "$ENABLE_CLOUDWATCH_MONITORING" = "true" ]; then
+    echo "Installing CloudWatch Agent..."
+
+    # Download and install CloudWatch Agent
+    dnf install -y amazon-cloudwatch-agent
+
+    # Create CloudWatch Agent configuration
+    cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << CWEOF
+{
+    "agent": {
+        "metrics_collection_interval": 60,
+        "run_as_user": "root"
+    },
+    "metrics": {
+        "namespace": "$PROJECT_NAME",
+        "append_dimensions": {
+            "InstanceId": "\$${aws:InstanceId}"
+        },
+        "aggregation_dimensions": [["InstanceId"]],
+        "metrics_collected": {
+            "cpu": {
+                "measurement": [
+                    "cpu_usage_idle",
+                    "cpu_usage_user",
+                    "cpu_usage_system",
+                    "cpu_usage_iowait"
+                ],
+                "metrics_collection_interval": 60,
+                "totalcpu": true,
+                "resources": ["*"]
+            },
+            "mem": {
+                "measurement": [
+                    "mem_used_percent",
+                    "mem_used",
+                    "mem_available",
+                    "mem_total"
+                ],
+                "metrics_collection_interval": 60
+            },
+            "disk": {
+                "measurement": [
+                    "disk_used_percent",
+                    "disk_used",
+                    "disk_free"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": ["/"]
+            },
+            "diskio": {
+                "measurement": [
+                    "diskio_reads",
+                    "diskio_writes",
+                    "diskio_read_bytes",
+                    "diskio_write_bytes"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": ["*"]
+            },
+            "netstat": {
+                "measurement": [
+                    "netstat_tcp_established",
+                    "netstat_tcp_time_wait"
+                ],
+                "metrics_collection_interval": 60
+            }
+        }
+    }
+}
+CWEOF
+
+    # Start CloudWatch Agent
+    echo "Starting CloudWatch Agent..."
+    /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+        -a fetch-config \
+        -m ec2 \
+        -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+        -s
+
+    # Enable CloudWatch Agent to start on boot
+    systemctl enable amazon-cloudwatch-agent
+
+    echo "CloudWatch Agent installed and started successfully"
+fi
 
 # Create systemd service for auto-start on reboot
 cat > /etc/systemd/system/ladybugs.service << 'EOF'

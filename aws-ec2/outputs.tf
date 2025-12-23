@@ -86,3 +86,22 @@ output "refresh_secrets_command" {
   description = "Command to refresh secrets from Secrets Manager (run on EC2 instance)"
   value       = local.use_secrets_manager ? "sudo /opt/ladybugs/refresh-secrets.sh" : "Secrets Manager not enabled"
 }
+
+# =============================================================================
+# CloudWatch Monitoring (when enabled)
+# =============================================================================
+
+output "cloudwatch_metrics_url" {
+  description = "CloudWatch Metrics console URL for the Ladybugs namespace"
+  value       = var.enable_cloudwatch_monitoring ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#metricsV2?graph=~()&query=~'*7bCWAgent*2cInstanceId*7d" : "CloudWatch monitoring not enabled"
+}
+
+output "cloudwatch_ec2_dashboard_url" {
+  description = "CloudWatch EC2 dashboard URL for this instance"
+  value       = var.enable_cloudwatch_monitoring ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#home:dashboards/EC2?~(alarmStateFilter~'ALARM)" : "CloudWatch monitoring not enabled"
+}
+
+output "cloudwatch_agent_status_command" {
+  description = "Command to check CloudWatch Agent status (run on EC2 instance)"
+  value       = var.enable_cloudwatch_monitoring ? "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status" : "CloudWatch monitoring not enabled"
+}

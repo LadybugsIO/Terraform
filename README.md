@@ -39,6 +39,7 @@ terraform apply
 | Elastic IP | Static public IP address |
 | Security Group | Controlled access to SSH, API, Neo4j, Seq |
 | API Gateway | HTTPS endpoint with valid SSL certificate |
+| CloudWatch Agent | CPU, memory, disk, and network metrics |
 
 ## Configuration
 
@@ -61,6 +62,7 @@ Edit `terraform.tfvars` to customize your deployment:
 | `key_name` | "" | EC2 key pair for SSH access |
 | `allowed_ssh_cidrs` | ["0.0.0.0/0"] | IPs allowed to SSH |
 | `allowed_api_cidrs` | ["0.0.0.0/0"] | IPs allowed to access services |
+| `enable_cloudwatch_monitoring` | true | Enable CloudWatch Agent for metrics |
 
 ### Integrations
 
@@ -97,6 +99,8 @@ After deployment, Terraform displays:
 | `neo4j_browser_url` | Neo4j database UI |
 | `seq_logs_url` | Application logs UI |
 | `ssh_command` | SSH connection command |
+| `cloudwatch_metrics_url` | CloudWatch metrics console |
+| `cloudwatch_agent_status_command` | Command to check agent status |
 
 ## Post-Deployment
 
@@ -123,6 +127,47 @@ Use the `api_gateway_url` output for webhook integrations:
 - **Jira**: `https://<api_gateway_url>/jira/webhook`
 
 The API Gateway provides a valid SSL certificate required by Slack and Jira.
+
+## CloudWatch Monitoring
+
+CloudWatch monitoring is enabled by default, collecting system metrics every 60 seconds.
+
+### Metrics Collected
+
+| Category | Metrics |
+|----------|---------|
+| CPU | usage_idle, usage_user, usage_system, usage_iowait |
+| Memory | used_percent, used, available, total |
+| Disk | used_percent, used, free |
+| Disk I/O | reads, writes, read_bytes, write_bytes |
+| Network | tcp_established, tcp_time_wait |
+
+### Viewing Metrics
+
+1. Use the `cloudwatch_metrics_url` output to open CloudWatch console
+2. Navigate to **CloudWatch** → **Metrics** → **All metrics** → **ladybugs**
+3. Select metrics to visualize (e.g., `mem_used_percent`)
+
+### Troubleshooting CloudWatch Agent
+
+```bash
+# Check agent status
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status
+
+# View agent logs
+sudo tail -f /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log
+
+# Restart agent
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a restart
+```
+
+### Disabling Monitoring
+
+To disable CloudWatch monitoring:
+
+```hcl
+enable_cloudwatch_monitoring = false
+```
 
 ## IAM Policy
 

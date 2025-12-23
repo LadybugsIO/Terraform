@@ -73,6 +73,13 @@ variable "secrets_manager_name" {
   default     = ""
 }
 
+# CloudWatch Monitoring
+variable "enable_cloudwatch_monitoring" {
+  description = "Enable CloudWatch monitoring with detailed CPU, memory, and disk metrics"
+  type        = bool
+  default     = true
+}
+
 # Tags
 variable "environment" {
   description = "Environment name (e.g., production, staging)"

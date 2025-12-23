@@ -191,6 +191,9 @@ locals {
 
   # Secret name for created secrets
   secrets_manager_name = var.secrets_manager_name != "" ? var.secrets_manager_name : "${var.project_name}-${var.environment}-env"
+
+  # IAM role is needed for Secrets Manager OR CloudWatch monitoring
+  use_iam_role = local.use_secrets_manager || var.enable_cloudwatch_monitoring
 }
 
 # =============================================================================
@@ -220,12 +223,12 @@ resource "aws_secretsmanager_secret_version" "ladybugs" {
 }
 
 # =============================================================================
-# IAM Role for EC2 (Required when using Secrets Manager)
+# IAM Role for EC2 (Required when using Secrets Manager or CloudWatch monitoring)
 # =============================================================================
 
-# IAM role for EC2 instance to access Secrets Manager
+# IAM role for EC2 instance (Secrets Manager and/or CloudWatch)
 resource "aws_iam_role" "ladybugs_ec2" {
-  count = local.use_secrets_manager ? 1 : 0
+  count = local.use_iam_role ? 1 : 0
 
   name = "${var.project_name}-${var.environment}-ec2-role"
 
@@ -271,9 +274,44 @@ resource "aws_iam_role_policy" "secrets_manager_read" {
   })
 }
 
+# IAM policy for CloudWatch Agent
+resource "aws_iam_role_policy" "cloudwatch_agent" {
+  count = var.enable_cloudwatch_monitoring ? 1 : 0
+
+  name = "${var.project_name}-cloudwatch-agent"
+  role = aws_iam_role.ladybugs_ec2[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeTags",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups",
+          "logs:CreateLogStream",
+          "logs:CreateLogGroup"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
+      }
+    ]
+  })
+}
+
 # Instance profile to attach the role to EC2
 resource "aws_iam_instance_profile" "ladybugs" {
-  count = local.use_secrets_manager ? 1 : 0
+  count = local.use_iam_role ? 1 : 0
 
   name = "${var.project_name}-${var.environment}-ec2-profile"
   role = aws_iam_role.ladybugs_ec2[0].name
@@ -293,8 +331,11 @@ resource "aws_instance" "ladybugs" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ladybugs.id]
 
-  # Attach IAM instance profile when using Secrets Manager
-  iam_instance_profile = local.use_secrets_manager ? aws_iam_instance_profile.ladybugs[0].name : null
+  # Attach IAM instance profile when using Secrets Manager or CloudWatch
+  iam_instance_profile = local.use_iam_role ? aws_iam_instance_profile.ladybugs[0].name : null
+
+  # Enable detailed monitoring for 1-minute CloudWatch metrics (vs 5-minute default)
+  monitoring = var.enable_cloudwatch_monitoring
 
   root_block_device {
     volume_size           = var.volume_size
@@ -304,11 +345,13 @@ resource "aws_instance" "ladybugs" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh", {
-    docker_hub_token        = var.docker_hub_token
-    env_content             = local.env_content
-    use_secrets_manager     = local.use_secrets_manager
-    secrets_manager_arn     = local.secrets_manager_arn
-    aws_region              = var.aws_region
+    docker_hub_token             = var.docker_hub_token
+    env_content                  = local.env_content
+    use_secrets_manager          = local.use_secrets_manager
+    secrets_manager_arn          = local.secrets_manager_arn
+    aws_region                   = var.aws_region
+    enable_cloudwatch_monitoring = var.enable_cloudwatch_monitoring
+    project_name                 = var.project_name
   }))
 
   tags = {
@@ -322,10 +365,11 @@ resource "aws_instance" "ladybugs" {
     prevent_destroy = false
   }
 
-  # Ensure IAM role and Secrets Manager are created before the instance
+  # Ensure IAM role, policies, and Secrets Manager are created before the instance
   depends_on = [
     aws_iam_instance_profile.ladybugs,
-    aws_secretsmanager_secret_version.ladybugs
+    aws_secretsmanager_secret_version.ladybugs,
+    aws_iam_role_policy.cloudwatch_agent
   ]
 }
 
