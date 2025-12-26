@@ -23,6 +23,9 @@ AWS_REGION="${aws_region}"
 ENABLE_CLOUDWATCH_MONITORING="${enable_cloudwatch_monitoring}"
 PROJECT_NAME="${project_name}"
 
+# Environment validation configuration (set by Terraform)
+SKIP_ENV_VALIDATION="${skip_env_validation}"
+
 # Create install directory
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -122,6 +125,41 @@ fi
 if [ ! -s .env ]; then
     echo "No environment variables provided, using example file..."
     cp .env.example .env
+fi
+
+# =============================================================================
+# Environment Validation
+# =============================================================================
+if [ "$SKIP_ENV_VALIDATION" != "true" ]; then
+    echo "Validating environment configuration..."
+
+    # Check for Node.js, install if needed
+    if ! command -v node &> /dev/null; then
+        echo "Installing Node.js for environment validation..."
+        dnf install -y nodejs || {
+            echo "ERROR: Failed to install Node.js. Set skip_env_validation=true to bypass."
+            exit 1
+        }
+    fi
+
+    # Download and run validator
+    VALIDATOR_URL="$BASE_URL/validate-env.js"
+    curl -fsSL "$VALIDATOR_URL" -o /tmp/validate-env.js || {
+        echo "WARNING: Could not download validator from $VALIDATOR_URL, skipping validation"
+    }
+
+    if [ -f /tmp/validate-env.js ]; then
+        node /tmp/validate-env.js --env "$INSTALL_DIR/.env" --strict || {
+            echo ""
+            echo "ERROR: Environment validation failed!"
+            echo "Fix the configuration errors above or set skip_env_validation=true to bypass."
+            exit 1
+        }
+        echo "Environment validation passed!"
+        rm -f /tmp/validate-env.js
+    fi
+else
+    echo "Skipping environment validation (skip_env_validation=true)"
 fi
 
 # Pull images

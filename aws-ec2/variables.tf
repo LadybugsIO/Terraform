@@ -73,6 +73,13 @@ variable "secrets_manager_name" {
   default     = ""
 }
 
+# Environment Validation
+variable "skip_env_validation" {
+  description = "Skip environment variable validation during EC2 bootstrap (requires Node.js to be installed)"
+  type        = bool
+  default     = false
+}
+
 # CloudWatch Monitoring
 variable "enable_cloudwatch_monitoring" {
   description = "Enable CloudWatch monitoring with detailed CPU, memory, and disk metrics"

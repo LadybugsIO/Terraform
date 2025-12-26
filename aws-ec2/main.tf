@@ -352,6 +352,7 @@ resource "aws_instance" "ladybugs" {
     aws_region                   = var.aws_region
     enable_cloudwatch_monitoring = var.enable_cloudwatch_monitoring
     project_name                 = var.project_name
+    skip_env_validation          = var.skip_env_validation
   }))
 
   tags = {
