@@ -50,7 +50,7 @@ Edit `terraform.tfvars` to customize your deployment:
 | Variable | Description |
 |----------|-------------|
 | `docker_hub_token` | Docker Hub token for pulling Ladybugs images |
-| `ladybugs_env_vars.OPEN_ROUTER_API_KEY` | OpenRouter API key for AI features |
+| `ladybugs_env_vars.AI_PROVIDER_API_KEY` | OpenRouter API key for AI features |
 
 ### Optional Variables
 
@@ -70,7 +70,7 @@ Configure these in `ladybugs_env_vars`:
 
 ```hcl
 ladybugs_env_vars = {
-  "OPEN_ROUTER_API_KEY" = "your-key"
+  "AI_PROVIDER_API_KEY" = "your-key"
 
   # Slack
   "SLACK_BOT_TOKEN"       = "xoxb-..."
