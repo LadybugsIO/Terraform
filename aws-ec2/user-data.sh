@@ -26,6 +26,11 @@ PROJECT_NAME="${project_name}"
 # Environment validation configuration (set by Terraform)
 SKIP_ENV_VALIDATION="${skip_env_validation}"
 
+# EFS configuration (set by Terraform)
+USE_EFS="${use_efs}"
+EFS_FILE_SYSTEM_ID="${efs_file_system_id}"
+EFS_MOUNT_PATH="${efs_mount_path}"
+
 # Create install directory
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -49,6 +54,42 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 docker --version
 docker compose version
 
+# =============================================================================
+# EFS Mounting (Optional) - For external logs from user-provided EFS
+# =============================================================================
+if [ "$USE_EFS" = "true" ]; then
+    echo "Setting up EFS mount..."
+
+    # Install NFS utilities
+    echo "Installing NFS utilities..."
+    dnf install -y nfs-utils
+
+    # Create mount point
+    mkdir -p "$EFS_MOUNT_PATH"
+
+    # Get the EFS DNS name (format: fs-xxxxx.efs.region.amazonaws.com)
+    EFS_DNS="$EFS_FILE_SYSTEM_ID.efs.$AWS_REGION.amazonaws.com"
+
+    # Mount EFS with recommended options
+    echo "Mounting EFS at $EFS_MOUNT_PATH..."
+    mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport \
+        "$EFS_DNS":/ "$EFS_MOUNT_PATH"
+
+    # Verify mount
+    if mountpoint -q "$EFS_MOUNT_PATH"; then
+        echo "EFS mounted successfully at $EFS_MOUNT_PATH"
+
+        # Add to fstab for persistence across reboots
+        echo "$EFS_DNS:/ $EFS_MOUNT_PATH nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0" >> /etc/fstab
+
+        echo "EFS mount added to /etc/fstab for persistence"
+    else
+        echo "WARNING: EFS mount may have failed. Check /var/log/ladybugs-install.log for details."
+    fi
+else
+    echo "EFS mounting skipped (not configured)"
+fi
+
 # Login to Docker Hub
 echo "Logging in to Docker Hub..."
 echo "${docker_hub_token}" | docker login -u ladybugsio --password-stdin
@@ -56,6 +97,17 @@ echo "${docker_hub_token}" | docker login -u ladybugsio --password-stdin
 # Download docker-compose.yml
 echo "Downloading docker-compose.yml..."
 curl -fsSL "$DOCKER_COMPOSE_URL" -o docker-compose.yml
+
+# Add EFS volume mount to docker-compose.yml if EFS is enabled
+if [ "$USE_EFS" = "true" ]; then
+    echo "Adding EFS volume mount to docker-compose.yml..."
+
+    # Add the bind mount for external logs to the ladybugs service volumes
+    # This inserts the EFS mount after the global-settings volume line
+    sed -i '/ladybugs-global-settings:\/app\/global-settings/a\      - '"$EFS_MOUNT_PATH"':\/app\/external-logs' docker-compose.yml
+
+    echo "EFS volume mount added: $EFS_MOUNT_PATH:/app/external-logs"
+fi
 
 # Download .env template
 echo "Downloading .env template..."
@@ -125,6 +177,18 @@ fi
 if [ ! -s .env ]; then
     echo "No environment variables provided, using example file..."
     cp .env.example .env
+fi
+
+# Add/update EXTERNAL_LOGS_DIR for EFS if enabled
+if [ "$USE_EFS" = "true" ]; then
+    echo "Configuring EXTERNAL_LOGS_DIR for EFS..."
+
+    # Remove any existing EXTERNAL_LOGS_DIR line and add the new one
+    sed -i '/^EXTERNAL_LOGS_DIR=/d' .env
+    echo "EXTERNAL_LOGS_DIR=/app/external-logs" >> .env
+    echo "EXTERNAL_LOGS_MODE=Live" >> .env
+
+    echo "EXTERNAL_LOGS_DIR set to /app/external-logs"
 fi
 
 # =============================================================================

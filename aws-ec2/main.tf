@@ -192,9 +192,13 @@ locals {
   # Secret name for created secrets
   secrets_manager_name = var.secrets_manager_name != "" ? var.secrets_manager_name : "${var.project_name}-${var.environment}-env"
 
-  # IAM role is needed for Secrets Manager OR CloudWatch monitoring
+  # IAM role is needed for Secrets Manager, CloudWatch, or EFS
   use_iam_role = local.use_secrets_manager || var.enable_cloudwatch_monitoring
+
+  # Determine if we're using EFS for external logs
+  use_efs = var.efs_file_system_id != ""
 }
+
 
 # =============================================================================
 # Secrets Manager (Optional) - For secure environment variable storage
@@ -223,14 +227,57 @@ resource "aws_secretsmanager_secret_version" "ladybugs" {
 }
 
 # =============================================================================
-# IAM Role for EC2 (Required when using Secrets Manager or CloudWatch monitoring)
+# EFS (Optional) - For mounting external logs from user-provided EFS
 # =============================================================================
 
-# IAM role for EC2 instance (Secrets Manager and/or CloudWatch)
+# Security group for EFS mount target (allows NFS from EC2)
+resource "aws_security_group" "efs" {
+  count = local.use_efs ? 1 : 0
+
+  name        = "${var.project_name}-efs-sg"
+  description = "Security group for EFS mount target - allows NFS from Ladybugs EC2"
+  vpc_id      = aws_vpc.ladybugs.id
+
+  # NFS access from EC2 security group
+  ingress {
+    description     = "NFS from Ladybugs EC2"
+    from_port       = 2049
+    to_port         = 2049
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ladybugs.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.project_name}-efs-sg"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# EFS mount target in the public subnet (uses user-provided EFS file system)
+resource "aws_efs_mount_target" "ladybugs" {
+  count = local.use_efs ? 1 : 0
+
+  file_system_id  = var.efs_file_system_id
+  subnet_id       = aws_subnet.public.id
+  security_groups = [aws_security_group.efs[0].id]
+}
+
+# =============================================================================
+# IAM Role for EC2 (Required for Secrets Manager or CloudWatch monitoring)
+# =============================================================================
+
+# IAM role for EC2 instance
 resource "aws_iam_role" "ladybugs_ec2" {
   count = local.use_iam_role ? 1 : 0
-
-  name = "${var.project_name}-${var.environment}-ec2-role"
+  name  = "${var.project_name}-${var.environment}-ec2-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -312,9 +359,8 @@ resource "aws_iam_role_policy" "cloudwatch_agent" {
 # Instance profile to attach the role to EC2
 resource "aws_iam_instance_profile" "ladybugs" {
   count = local.use_iam_role ? 1 : 0
-
-  name = "${var.project_name}-${var.environment}-ec2-profile"
-  role = aws_iam_role.ladybugs_ec2[0].name
+  name  = "${var.project_name}-${var.environment}-ec2-profile"
+  role  = aws_iam_role.ladybugs_ec2[0].name
 
   tags = {
     Name        = "${var.project_name}-ec2-profile"
@@ -344,7 +390,9 @@ resource "aws_instance" "ladybugs" {
     encrypted             = true
   }
 
-  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
+  # Gzip-compressed user_data - cloud-init automatically decompresses
+  # This reduces the script size to fit within the 16KB limit
+  user_data_base64 = base64gzip(templatefile("${path.module}/user-data.sh", {
     docker_hub_token             = var.docker_hub_token
     env_content                  = local.env_content
     use_secrets_manager          = local.use_secrets_manager
@@ -353,6 +401,9 @@ resource "aws_instance" "ladybugs" {
     enable_cloudwatch_monitoring = var.enable_cloudwatch_monitoring
     project_name                 = var.project_name
     skip_env_validation          = var.skip_env_validation
+    use_efs                      = local.use_efs
+    efs_file_system_id           = var.efs_file_system_id
+    efs_mount_path               = var.efs_mount_path
   }))
 
   tags = {
@@ -366,11 +417,12 @@ resource "aws_instance" "ladybugs" {
     prevent_destroy = false
   }
 
-  # Ensure IAM role, policies, and Secrets Manager are created before the instance
+  # Ensure IAM role, policies, Secrets Manager, and EFS mount target are created before the instance
   depends_on = [
     aws_iam_instance_profile.ladybugs,
     aws_secretsmanager_secret_version.ladybugs,
-    aws_iam_role_policy.cloudwatch_agent
+    aws_iam_role_policy.cloudwatch_agent,
+    aws_efs_mount_target.ladybugs
   ]
 }
 

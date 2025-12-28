@@ -23,7 +23,8 @@
         "ec2:DescribeNetworkInterfaces",
         "ec2:DescribeTags",
         "ec2:DescribeAvailabilityZones",
-        "ec2:DescribeAccountAttributes"
+        "ec2:DescribeAccountAttributes",
+        "ec2:DescribeIamInstanceProfileAssociations"
       ],
       "Resource": "*"
     },
@@ -209,11 +210,37 @@
       "Resource": [
         "arn:aws:apigateway:*::/apis",
         "arn:aws:apigateway:*::/apis/*",
+        "arn:aws:apigateway:*::/apis/*/stages",
+        "arn:aws:apigateway:*::/apis/*/stages/*",
+        "arn:aws:apigateway:*::/apis/*/integrations",
+        "arn:aws:apigateway:*::/apis/*/integrations/*",
+        "arn:aws:apigateway:*::/apis/*/routes",
+        "arn:aws:apigateway:*::/apis/*/routes/*",
         "arn:aws:apigateway:*::/vpclinks",
         "arn:aws:apigateway:*::/vpclinks/*",
         "arn:aws:apigateway:*::/tags",
         "arn:aws:apigateway:*::/tags/*"
       ]
+    },
+    {
+      "Sid": "EFSDescribe",
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:DescribeFileSystems",
+        "elasticfilesystem:DescribeMountTargets",
+        "elasticfilesystem:DescribeMountTargetSecurityGroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EFSMountTarget",
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:CreateMountTarget",
+        "elasticfilesystem:DeleteMountTarget",
+        "elasticfilesystem:ModifyMountTargetSecurityGroups"
+      ],
+      "Resource": "arn:aws:elasticfilesystem:*:*:file-system/*"
     }
   ]
 }

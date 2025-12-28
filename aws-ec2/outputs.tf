@@ -105,3 +105,33 @@ output "cloudwatch_agent_status_command" {
   description = "Command to check CloudWatch Agent status (run on EC2 instance)"
   value       = var.enable_cloudwatch_monitoring ? "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status" : "CloudWatch monitoring not enabled"
 }
+
+# =============================================================================
+# EFS (External Logs) - when enabled
+# =============================================================================
+
+output "efs_file_system_id" {
+  description = "EFS File System ID used for external logs"
+  value       = local.use_efs ? var.efs_file_system_id : null
+}
+
+output "efs_mount_target_id" {
+  description = "EFS Mount Target ID created in the VPC"
+  value       = local.use_efs ? aws_efs_mount_target.ladybugs[0].id : null
+}
+
+output "efs_mount_path" {
+  description = "Path where EFS is mounted on EC2"
+  value       = local.use_efs ? var.efs_mount_path : null
+}
+
+output "efs_container_path" {
+  description = "Path inside the container where external logs are available"
+  value       = local.use_efs ? "/app/external-logs" : null
+}
+
+output "efs_mount_check_command" {
+  description = "Command to check EFS mount status (run on EC2 instance)"
+  value       = local.use_efs ? "df -h ${var.efs_mount_path} && ls -la ${var.efs_mount_path}" : "EFS not configured"
+}
+

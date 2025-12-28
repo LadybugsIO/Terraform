@@ -87,6 +87,19 @@ variable "enable_cloudwatch_monitoring" {
   default     = true
 }
 
+# EFS Configuration (External Logs)
+variable "efs_file_system_id" {
+  description = "ID of an existing EFS file system to mount for external logs (e.g., fs-0123456789abcdef0). Leave empty to skip EFS mounting."
+  type        = string
+  default     = ""
+}
+
+variable "efs_mount_path" {
+  description = "Path on the EC2 instance where EFS will be mounted"
+  type        = string
+  default     = "/mnt/efs/logs"
+}
+
 # Tags
 variable "environment" {
   description = "Environment name (e.g., production, staging)"

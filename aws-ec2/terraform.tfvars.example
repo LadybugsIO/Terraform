@@ -87,6 +87,37 @@ ladybugs_env_vars = {
 # create_secrets_manager = true
 # secrets_manager_name = "ladybugs-production-env"  # Optional: custom name for the secret
 
+# -----------------------------------------------------------------------------
+# EFS Configuration (External Logs)
+# -----------------------------------------------------------------------------
+# Mount an existing EFS file system for external log analysis.
+# This allows Ladybugs to read logs from other AWS services stored on EFS.
+#
+# Prerequisites:
+#   1. Create an EFS file system in the AWS Console or via Terraform
+#   2. Ensure the EFS is in the same region as your EC2 instance
+#   3. Provide the file system ID below
+#
+# How it works:
+#   - EFS is mounted at /mnt/efs/logs on the EC2 instance
+#   - Container accesses logs at /app/external-logs
+#   - Each top-level directory in EFS is treated as a "service"
+#   - The External Logs Agent can query all logs with regex patterns
+#
+# Directory structure example:
+#   /mnt/efs/logs/
+#   ├── api-service/
+#   │   ├── app.log
+#   │   └── error.log
+#   ├── payment-service/
+#   │   └── transactions.log
+#   └── auth-service/
+#       └── login.log
+
+# Uncomment to enable EFS mounting
+# efs_file_system_id = "fs-0123456789abcdef0"  # Your EFS file system ID
+# efs_mount_path = "/mnt/efs/logs"  # Optional: customize mount path (default: /mnt/efs/logs)
+
 # Resource tagging
 environment  = "production"
 project_name = "ladybugs"
